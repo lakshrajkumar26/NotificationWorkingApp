@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "113484775657",
+    "project_id": "parkvech",
+    "storage_bucket": "parkvech.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113484775657:android:59105fb1d46a487fa63078",
+        "android_client_info": {
+          "package_name": "com.myapp.parkvech"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJSBsL1ZB_1-Bc3MPUzByUgvCT5T5ihg0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113484775657:android:0b2bba83599d7e24a63078",
+        "android_client_info": {
+          "package_name": "com.parkvechnew"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJSBsL1ZB_1-Bc3MPUzByUgvCT5T5ihg0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

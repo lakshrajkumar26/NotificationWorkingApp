@@ -12,10 +12,21 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        // Use an explicit AGP version. If you already manage this elsewhere, keep that, otherwise 7.4.2 is a common working choice.
+        classpath("com.android.tools.build:gradle:7.4.2")
+
+        // react-native gradle plugin - keep the same line you had (no version shown previously)
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+
+        // Kotlin plugin (keep existing)
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
+
+        // Google services plugin (required to apply com.google.gms.google-services in app module)
+        classpath("com.google.gms:google-services:4.4.3")
     }
 }
 
+// Keep the root-level plugin you use for react native
 apply plugin: "com.facebook.react.rootproject"
+
+// DON'T apply google-services here to all subprojects- apply only in app module (we already added it in android/app/build.gradle)
