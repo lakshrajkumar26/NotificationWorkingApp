@@ -3,267 +3,169 @@
 // import { SafeAreaView, Platform, Alert } from 'react-native';
 // import { WebView, WebViewMessageEvent } from 'react-native-webview';
 // import messaging from '@react-native-firebase/messaging';
-
-// const WEB_URL = 'https://apark-phi.vercel.app';
-// const BACKEND_SAVE_TOKEN = 'https://aparkfinder-abackend.onrender.com/api/users/save-token';
-
-// export default function App() {
-//   const webRef = useRef<WebView | null>(null);
-//   const [nativeToken, setNativeToken] = useState<string | null>(null);
-//   const [userIdFromWeb, setUserIdFromWeb] = useState<string | null>(null);
-//   const INJECTED = `window.__IS_RN_WEBVIEW = true; true;`;
-
-//   useEffect(() => {
-//     let mounted = true;
-
-//     async function initFCM() {
-//       try {
-//         const authStatus = await messaging().requestPermission();
-//         const enabled =
-//           authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-//           authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-//         if (!enabled) {
-//           console.log('Notification permission not granted.');
-//           return;
-//         }
-
-//         const token = await messaging().getToken();
-//         console.log('FCM Token (native):', token);
-//         if (!mounted || !token) return;
-
-//         setNativeToken(token);
-
-//         // Post token into WebView so website sees it (website will save to backend using userId)
-//         if (webRef.current) {
-//           webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
-//         }
-
-//         // Optionally: if we already have userId from web, save to backend from native too
-//         // (only do this if userIdFromWeb is present)
-//         if (userIdFromWeb) {
-//           try {
-//             await fetch(BACKEND_SAVE_TOKEN, {
-//               method: 'POST',
-//               headers: { 'Content-Type': 'application/json' },
-//               body: JSON.stringify({
-//                 userId: userIdFromWeb,
-//                 fcmToken: token,
-//                 deviceInfo: Platform.OS + ' / RN',
-//               }),
-//             });
-//             console.log('Native saved token to backend because userId known');
-//           } catch (err) {
-//             console.warn('Failed native save-token', err);
-//           }
-//         }
-//       } catch (err) {
-//         console.warn('FCM init error', err);
-//       }
-//     }
-
-//     initFCM();
-
-//     const unsubRefresh = messaging().onTokenRefresh(newToken => {
-//       console.log('Token refreshed:', newToken);
-//       setNativeToken(newToken);
-//       if (webRef.current) {
-//         webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: newToken }));
-//       }
-//       // If we have userIdFromWeb, update backend from native too
-//       if (userIdFromWeb) {
-//         fetch(BACKEND_SAVE_TOKEN, {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify({ userId: userIdFromWeb, fcmToken: newToken, deviceInfo: Platform.OS + ' / RN' }),
-//         }).catch(e => console.warn('save-token error', e));
-//       }
-//     });
-
-//     const unsubForeground = messaging().onMessage(async remoteMessage => {
-//       console.log('Foreground message:', remoteMessage);
-//       if (remoteMessage?.notification) {
-//         Alert.alert(remoteMessage.notification.title ?? 'Notification', remoteMessage.notification.body ?? '');
-//       }
-//     });
-
-//     return () => {
-//       mounted = false;
-//       unsubRefresh();
-//       unsubForeground();
-//     };
-//   }, [userIdFromWeb]); // re-run native save behavior when userIdFromWeb set
-
-//   const onWebMessage = (event: WebViewMessageEvent) => {
-//     try {
-//       const data = JSON.parse(event.nativeEvent.data);
-
-//       if (data?.type === 'REQUEST_NATIVE_TOKEN') {
-//         if (nativeToken && webRef.current) {
-//           webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: nativeToken }));
-//         } else {
-//           // if no token yet, get and send when ready
-//           messaging().getToken().then(token => {
-//             setNativeToken(token);
-//             if (webRef.current) webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
-//           }).catch(e => console.warn('getToken error', e));
-//         }
-//       }
-
-//       // Web sends user info when user logs in — store it so native can optionally call backend
-//       if (data?.type === 'USER_INFO' && data.userId) {
-//         setUserIdFromWeb(data.userId);
-//         console.log('Received userId from web:', data.userId);
-//       }
-
-//       if (data?.type === 'LOG') {
-//         console.log('LOG from web:', data.message);
-//       }
-//     } catch (e) {
-//       console.warn('Invalid message from web', e);
-//     }
-//   };
-
-//   return (
-//     <SafeAreaView style={{ flex: 1 }}>
-//       <WebView
-//         injectedJavaScript={INJECTED}
-//         ref={webRef}
-//         source={{ uri: WEB_URL }}
-//         onMessage={onWebMessage}
-//         originWhitelist={['*']}
-//         javaScriptEnabled={true}
-//       />
-//     </SafeAreaView>
-//   );
-// }
-// App.tsx
-
-
-//---------------------------MID---------------------------------
-
-// import React, { useEffect, useRef, useState } from 'react';
-// import { SafeAreaView, Platform, Alert } from 'react-native';
-// import { WebView, WebViewMessageEvent } from 'react-native-webview';
-// import messaging from '@react-native-firebase/messaging';
 // import AsyncStorage from '@react-native-async-storage/async-storage';
+// import DeviceInfo from 'react-native-device-info';
 
-// const WEB_URL = 'https://apark-phi.vercel.app';
-// const BACKEND_SAVE_TOKEN = 'https://aparkfinder-abackend.onrender.com/api/users/save-token';
+// const SERVER_BASE = 'https://aparkfinder-abackend.onrender.com';
+// const SAVE_TOKEN_BASIC_URL = `${SERVER_BASE}/api/users/save-token`;
+// const WEB_URL = 'https://park-vech-android.vercel.app';
 
 // const LOCAL_TOKEN_KEY = '@pv_pending_token';
+// const LOCAL_USERID_KEY = '@pv_pending_userid';
+
+// const INJECTED = `
+// (function(){
+//   try {
+//     window.__IS_RN_WEBVIEW = true;
+//     window.__sendUserToRN = function(){ 
+//       try {
+//         if (typeof window.sendUserToRN === 'function') {
+//           window.sendUserToRN(window.__CURRENT_USER_FOR_RN || null);
+//           return;
+//         }
+//         if (window.__CURRENT_USER_FOR_RN && window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+//           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', user: window.__CURRENT_USER_FOR_RN }));
+//         }
+//       } catch(e){}
+//     }
+//   } catch(e){}
+//   true;
+// })();
+// `;
 
 // export default function App() {
 //   const webRef = useRef<WebView | null>(null);
 //   const [nativeToken, setNativeToken] = useState<string | null>(null);
 //   const [userIdFromWeb, setUserIdFromWeb] = useState<string | null>(null);
-//   const INJECTED = `window.__IS_RN_WEBVIEW = true; true;`;
+//   const postedSetRef = useRef<Set<string>>(new Set());
 
-//   // --- AsyncStorage helpers ---
+//   // AsyncStorage helpers
 //   async function saveTokenLocally(token: string) {
-//     try {
-//       await AsyncStorage.setItem(LOCAL_TOKEN_KEY, token);
-//       console.log('[App] Stored token locally (pending user login).');
-//     } catch (e) {
-//       console.warn('[App] Failed to save token locally', e);
-//     }
+//     await AsyncStorage.setItem(LOCAL_TOKEN_KEY, token).catch(e => console.warn('[App] saveTokenLocally error', e));
+//     console.log('[App] Stored pending token locally.');
 //   }
-
-//   async function getLocalToken(): Promise<string | null> {
-//     try {
-//       return await AsyncStorage.getItem(LOCAL_TOKEN_KEY);
-//     } catch (e) {
-//       console.warn('[App] Failed to read local token', e);
-//       return null;
-//     }
+//   async function getLocalToken() {
+//     return await AsyncStorage.getItem(LOCAL_TOKEN_KEY).catch(e => { console.warn('[App] getLocalToken error', e); return null; });
 //   }
-
 //   async function clearLocalToken() {
+//     await AsyncStorage.removeItem(LOCAL_TOKEN_KEY).catch(() => {});
+//     console.log('[App] Cleared pending token.');
+//   }
+//   async function saveUserIdLocally(userId: string) {
+//     await AsyncStorage.setItem(LOCAL_USERID_KEY, userId).catch(e => console.warn('[App] saveUserIdLocally error', e));
+//     console.log('[App] Stored pending userId locally.');
+//   }
+//   async function getLocalUserId() {
+//     return await AsyncStorage.getItem(LOCAL_USERID_KEY).catch(e => { console.warn('[App] getLocalUserId error', e); return null; });
+//   }
+//   async function clearLocalUserId() {
+//     await AsyncStorage.removeItem(LOCAL_USERID_KEY).catch(() => {});
+//     console.log('[App] Cleared pending userId.');
+//   }
+
+// // build a descriptive deviceInfo string using react-native-device-info
+// async function getDeviceInfoString() {
+//   try {
+//     const isEmulator = await DeviceInfo.isEmulator();
+//     const brand = DeviceInfo.getBrand?.() ?? '';
+//     const model = DeviceInfo.getModel?.() ?? '';
+//     const systemVersion = DeviceInfo.getSystemVersion?.() ?? Platform.Version?.toString?.();
+//     const appVersion = DeviceInfo.getVersion?.() ?? '';
+//     const kind = isEmulator ? (Platform.OS === 'android' ? 'Emulator' : 'Simulator') : 'Device';
+
+//     const info = `${Platform.OS} / RN ${kind} - ${brand} ${model} (OS ${systemVersion}) app ${appVersion}`;
+
+//     // 🔎 DEBUG log
+//     console.log('[App] Built deviceInfo string:', info);
+
+//     return info;
+//   } catch (e) {
+//     console.warn('[App] getDeviceInfoString failed', e);
+//     const fallback = `${Platform.OS} / RN (OS ${Platform.Version})`;
+//     console.log('[App] Using fallback deviceInfo string:', fallback);
+//     return fallback;
+//   }
+// }
+
+
+//   // POST token to backend with deviceInfo
+//   async function postTokenToBackend(userId: string | null, token: string) {
+//     if (!token) return false;
+//     const key = `${userId ?? 'null'}|${token}`;
+//     if (postedSetRef.current.has(key)) {
+//       console.log('[App] Already posted this token for this userId -> skip', key);
+//       return true;
+//     }
+
+//     const deviceInfo = await getDeviceInfoString();
+//     const payload: any = { fcmToken: token, deviceInfo };
+//     if (userId) payload.userId = userId;
+
 //     try {
-//       await AsyncStorage.removeItem(LOCAL_TOKEN_KEY);
-//       console.log('[App] Cleared local pending token.');
-//     } catch (e) {
-//       /* ignore */
-//     }
-//   }
-
-//   // --- Post to backend with simple retry/backoff and logging ---
-//   async function postTokenToBackend(userId: string, token: string, retries = 3) {
-//     if (!userId || !token) return false;
-//     const payload = {
-//       userId,
-//       fcmToken: token,
-//       deviceInfo: Platform.OS + ' / RN',
-//     };
-
-//     for (let attempt = 1; attempt <= retries; attempt++) {
-//       try {
-//         const res = await fetch(BACKEND_SAVE_TOKEN, {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify(payload),
-//         });
-
-//         const bodyText = await res.text().catch(() => '');
-//         if (res.ok) {
-//           console.log(`[App] Saved token to backend for user ${userId} (attempt ${attempt}).`);
-//           return true;
-//         } else {
-//           console.warn(`[App] save-token attempt ${attempt} failed: status=${res.status}, body=${bodyText}`);
-//         }
-//       } catch (err) {
-//         console.warn(`[App] save-token attempt ${attempt} network error:`, err);
+//       console.log('[App] POSTing token to backend', { url: SAVE_TOKEN_BASIC_URL, payload });
+//       const res = await fetch(SAVE_TOKEN_BASIC_URL, {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(payload),
+//       });
+//       const txt = await res.text().catch(() => '');
+//       console.log('[App] postTokenToBackend response', res.status, txt);
+//       if (res.ok) {
+//         postedSetRef.current.add(key);
+//         return true;
+//       } else {
+//         return false;
 //       }
-//       // exponential-ish backoff
-//       await new Promise<void>(resolve => setTimeout(resolve, attempt * 500));
+//     } catch (err) {
+//       console.warn('[App] postTokenToBackend network error', err);
+//       return false;
 //     }
-
-//     console.warn('[App] All attempts to save token failed; token remains pending for retry.');
-//     return false;
 //   }
 
-//   // --- FCM init & listeners (runs once) ---
+//   // try flush stored token + userId to backend
+//   async function tryFlushPending() {
+//     const token = nativeToken ?? (await getLocalToken());
+//     const userId = userIdFromWeb ?? (await getLocalUserId());
+//     if (!token) {
+//       console.log('[App] tryFlushPending: no token yet');
+//       return;
+//     }
+//     if (!userId) {
+//       console.log('[App] tryFlushPending: no userId yet');
+//       return;
+//     }
+//     const ok = await postTokenToBackend(userId, token);
+//     if (ok) {
+//       await clearLocalToken();
+//       await clearLocalUserId();
+//       console.log('[App] Token attached to user on backend; cleared local pending values.');
+//     } else {
+//       await saveTokenLocally(token);
+//       await saveUserIdLocally(userId);
+//       console.log('[App] Failed to attach token; saved pending values locally.');
+//     }
+//   }
+
+//   // FCM init & listeners (runs once, reacts to userIdFromWeb changes indirectly)
 //   useEffect(() => {
 //     let mounted = true;
 
 //     async function initFCM() {
 //       try {
-//         // Request permission (iOS / Android newer)
 //         const authStatus = await messaging().requestPermission();
 //         const enabled =
 //           authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
 //           authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-//         if (!enabled) {
-//           console.log('[App] Notification permission not granted.');
-//           return;
-//         }
+//         console.log('[App] messaging permission:', authStatus, 'enabled=', enabled);
+//         if (!enabled) return;
 
-//         // Get token
 //         const token = await messaging().getToken();
-//         console.log('FCM Token (native):', token);
+//         console.log('[App] FCM Token (native):', token);
 //         if (!mounted || !token) return;
 
 //         setNativeToken(token);
-
-//         // Post token into WebView so website sees it
-//         if (webRef.current) {
-//           webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
-//         }
-
-//         // If we already know logged-in user, try to send immediately
-//         if (userIdFromWeb) {
-//           const ok = await postTokenToBackend(userIdFromWeb, token);
-//           if (!ok) {
-//             // persist token for later retry
-//             await saveTokenLocally(token);
-//           } else {
-//             await clearLocalToken();
-//           }
-//         } else {
-//           // No user yet — persist pending token until USER_INFO arrives
-//           await saveTokenLocally(token);
-//         }
+//         await tryFlushPending();
 //       } catch (err) {
 //         console.warn('[App] FCM init error', err);
 //       }
@@ -271,30 +173,14 @@
 
 //     initFCM();
 
-//     // token refresh handling
 //     const unsubRefresh = messaging().onTokenRefresh(async newToken => {
-//       console.log('Token refreshed:', newToken);
+//       console.log('[App] Token refreshed:', newToken);
 //       setNativeToken(newToken);
-
-//       if (webRef.current) {
-//         webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: newToken }));
-//       }
-
-//       if (userIdFromWeb) {
-//         const ok = await postTokenToBackend(userIdFromWeb, newToken);
-//         if (!ok) {
-//           await saveTokenLocally(newToken);
-//         } else {
-//           await clearLocalToken();
-//         }
-//       } else {
-//         await saveTokenLocally(newToken);
-//       }
+//       await tryFlushPending();
 //     });
 
-//     // foreground message handler
 //     const unsubForeground = messaging().onMessage(async remoteMessage => {
-//       console.log('Foreground message:', remoteMessage);
+//       console.log('[App] Foreground message:', remoteMessage);
 //       if (remoteMessage?.notification) {
 //         Alert.alert(remoteMessage.notification.title ?? 'Notification', remoteMessage.notification.body ?? '');
 //       }
@@ -305,59 +191,63 @@
 //       unsubRefresh();
 //       unsubForeground();
 //     };
-//     // Note: intentionally no dependency on userIdFromWeb here — we handle sending when USER_INFO arrives
-//   }, []); // run once
+//   }, [userIdFromWeb]);
 
-//   // --- Handle incoming messages from WebView (USER_INFO, REQUEST_NATIVE_TOKEN, LOG) ---
+//   // Ask web page to send user on load complete
+//   const onWebViewLoadEnd = () => {
+//     if (webRef.current) {
+//       webRef.current.injectJavaScript('window.__sendUserToRN && window.__sendUserToRN(); true;');
+//       webRef.current.injectJavaScript('try{ if (typeof window.sendUserToRN === "function") window.sendUserToRN(window.__CURRENT_USER_FOR_RN||null);}catch(e){}; true;');
+//     }
+//   };
+
+//   // Handle messages from web
 //   const onWebMessage = (event: WebViewMessageEvent) => {
+//     console.log('[App] Raw WebView message:', event.nativeEvent.data);
+//     let data: any = null;
+//     try {
+//       data = JSON.parse(event.nativeEvent.data);
+//     } catch (e) {
+//       console.warn('[App] Failed to parse WebView message JSON', e);
+//       return;
+//     }
+
 //     (async () => {
 //       try {
-//         const data = JSON.parse(event.nativeEvent.data);
-
 //         if (data?.type === 'REQUEST_NATIVE_TOKEN') {
-//           if (nativeToken && webRef.current) {
-//             webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: nativeToken }));
-//           } else {
-//             // get token then send
-//             try {
-//               const token = await messaging().getToken();
-//               setNativeToken(token);
-//               if (webRef.current) webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
-//             } catch (e) {
-//               console.warn('[App] getToken error', e);
-//             }
-//           }
+//           // We're not sending the native token back to the web; ignore.
+//           console.log('[App] web requested native token (ignored).');
+//           return;
 //         }
 
-//         // When web tells us who the logged-in user is
-//         if (data?.type === 'USER_INFO' && data.userId) {
-//           const userId = data.userId;
-//           setUserIdFromWeb(userId);
-//           console.log('Received userId from web:', userId);
-
-//           // Try to send token immediately:
-//           // prefer in-memory token, fallback to persisted local token
-//           const tokenToSend = nativeToken ?? (await getLocalToken());
-//           if (!tokenToSend) {
-//             console.log('[App] No token available to send to backend on USER_INFO.');
+//         if (data?.type === 'USER_INFO') {
+//           const user = data.user ?? null;
+//           if (!user) {
+//             console.log('[App] Received USER_INFO null -> clearing userIdFromWeb');
+//             setUserIdFromWeb(null);
+//             await clearLocalUserId();
 //             return;
 //           }
-
-//           const ok = await postTokenToBackend(userId, tokenToSend);
-//           if (ok) {
-//             // success: clear stored token
-//             await clearLocalToken();
-//           } else {
-//             // failed: ensure it's persisted
-//             await saveTokenLocally(tokenToSend);
+//           const userId = user.id ?? user._id ?? null;
+//           if (!userId) {
+//             console.warn('[App] USER_INFO missing id field', user);
+//             return;
 //           }
+//           console.log('[App] Received userId from web:', userId);
+//           setUserIdFromWeb(userId);
+//           await saveUserIdLocally(userId);
+//           await tryFlushPending();
+//           return;
 //         }
 
 //         if (data?.type === 'LOG') {
-//           console.log('LOG from web:', data.message);
+//           console.log('[App] LOG from webview:', data.message);
+//           return;
 //         }
+
+//         console.log('[App] Unknown message from webview', data);
 //       } catch (e) {
-//         console.warn('Invalid message from web', e);
+//         console.warn('[App] Error handling WebView message', e);
 //       }
 //     })();
 //   };
@@ -369,6 +259,7 @@
 //         ref={webRef}
 //         source={{ uri: WEB_URL }}
 //         onMessage={onWebMessage}
+//         onLoadEnd={onWebViewLoadEnd}
 //         originWhitelist={['*']}
 //         javaScriptEnabled={true}
 //       />
@@ -383,100 +274,183 @@ import { SafeAreaView, Platform, Alert } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DeviceInfo from 'react-native-device-info';
 
-/**
- */
-const SERVER_BASE = 'https://aparkfinder-abackend.onrender.com'; 
-const SAVE_TOKEN_BASIC_URL = `${SERVER_BASE}/api/admin/save-token-basic`;
-const ANDROID_BASIC_SAVE_URL = `${SERVER_BASE}/api/admin/android-basic-save`;
+const SERVER_BASE = 'https://aparkfinder-abackend.onrender.com';
+const SAVE_TOKEN_BASIC_URL = `${SERVER_BASE}/api/users/save-token`;
+const WEB_URL = 'https://park-vech-android.vercel.app';
 
-// Choose which endpoint to call in tests. App defaults to SAVE_TOKEN_BASIC_URL.
-const BACKEND_SAVE_TOKEN = SAVE_TOKEN_BASIC_URL;
-const BACKEND_BASIC_TEST = ANDROID_BASIC_SAVE_URL;
-
-const WEB_URL = 'https://apark-phi.vercel.app';
 const LOCAL_TOKEN_KEY = '@pv_pending_token';
+const LOCAL_USERID_KEY = '@pv_pending_userid';
+const LOCAL_INITIAL_NOTIFICATION = '@pv_initial_notification';
+
+const INJECTED = `
+(function(){
+  try {
+    window.__IS_RN_WEBVIEW = true;
+    window.__sendUserToRN = function(){ 
+      try {
+        if (typeof window.sendUserToRN === 'function') {
+          window.sendUserToRN(window.__CURRENT_USER_FOR_RN || null);
+          return;
+        }
+        if (window.__CURRENT_USER_FOR_RN && window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_INFO', user: window.__CURRENT_USER_FOR_RN }));
+        }
+      } catch(e){}
+    }
+  } catch(e){}
+  true;
+})();
+`;
 
 export default function App() {
   const webRef = useRef<WebView | null>(null);
   const [nativeToken, setNativeToken] = useState<string | null>(null);
   const [userIdFromWeb, setUserIdFromWeb] = useState<string | null>(null);
-  const INJECTED = `window.__IS_RN_WEBVIEW = true; true;`;
+  const postedSetRef = useRef<Set<string>>(new Set());
+  const authTokenKey = '@pv_auth_token'; // optional if you later pass auth token from web
 
-  // --- AsyncStorage helpers ---
+  // ------------- AsyncStorage helpers -------------
   async function saveTokenLocally(token: string) {
-    try {
-      await AsyncStorage.setItem(LOCAL_TOKEN_KEY, token);
-      console.log('[App] Stored token locally (pending user login).');
-    } catch (e) {
-      console.warn('[App] Failed to save token locally', e);
-    }
+    await AsyncStorage.setItem(LOCAL_TOKEN_KEY, token).catch(e => console.warn('[App] saveTokenLocally error', e));
+    console.log('[App] Stored pending token locally.');
+  }
+  async function getLocalToken() {
+    return await AsyncStorage.getItem(LOCAL_TOKEN_KEY).catch(e => { console.warn('[App] getLocalToken error', e); return null; });
+  }
+  async function clearLocalToken() {
+    await AsyncStorage.removeItem(LOCAL_TOKEN_KEY).catch(() => {});
+    console.log('[App] Cleared pending token.');
+  }
+  async function saveUserIdLocally(userId: string) {
+    await AsyncStorage.setItem(LOCAL_USERID_KEY, userId).catch(e => console.warn('[App] saveUserIdLocally error', e));
+    console.log('[App] Stored pending userId locally.');
+  }
+  async function getLocalUserId() {
+    return await AsyncStorage.getItem(LOCAL_USERID_KEY).catch(e => { console.warn('[App] getLocalUserId error', e); return null; });
+  }
+  async function clearLocalUserId() {
+    await AsyncStorage.removeItem(LOCAL_USERID_KEY).catch(() => {});
+    console.log('[App] Cleared pending userId.');
   }
 
-  async function getLocalToken(): Promise<string | null> {
+  // persist initial notification for web to read on load (cold start).
+  async function saveInitialNotification(remoteMessage: any) {
     try {
-      return await AsyncStorage.getItem(LOCAL_TOKEN_KEY);
+      await AsyncStorage.setItem(LOCAL_INITIAL_NOTIFICATION, JSON.stringify(remoteMessage));
+      console.log('[App] Saved initial notification to AsyncStorage for web to pick up.');
     } catch (e) {
-      console.warn('[App] Failed to read local token', e);
+      console.warn('[App] Failed saving initial notification', e);
+    }
+  }
+  async function getInitialNotificationFromStorage() {
+    try {
+      const raw = await AsyncStorage.getItem(LOCAL_INITIAL_NOTIFICATION);
+      if (!raw) return null;
+      await AsyncStorage.removeItem(LOCAL_INITIAL_NOTIFICATION);
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn('[App] getInitialNotificationFromStorage error', e);
       return null;
     }
   }
 
-  async function clearLocalToken() {
+  // ------------- Device info -------------
+  async function getDeviceInfoString() {
     try {
-      await AsyncStorage.removeItem(LOCAL_TOKEN_KEY);
-      console.log('[App] Cleared local pending token.');
+      const isEmulator = await DeviceInfo.isEmulator();
+      const brand = (DeviceInfo.getBrand && DeviceInfo.getBrand()) || '';
+      const model = (DeviceInfo.getModel && DeviceInfo.getModel()) || '';
+      const systemVersion = (DeviceInfo.getSystemVersion && DeviceInfo.getSystemVersion()) || Platform.Version?.toString?.() || '';
+      const appVersion = (DeviceInfo.getVersion && DeviceInfo.getVersion()) || '';
+      const kind = isEmulator ? (Platform.OS === 'android' ? 'Emulator' : 'Simulator') : 'Device';
+
+      const info = `${Platform.OS} / RN ${kind} - ${brand} ${model} (OS ${systemVersion}) app ${appVersion}`;
+      console.log('[App] Built deviceInfo string:', info);
+      return info;
     } catch (e) {
-      /* ignore */
+      console.warn('[App] getDeviceInfoString failed', e);
+      const fallback = `${Platform.OS} / RN (OS ${Platform.Version})`;
+      console.log('[App] Using fallback deviceInfo string:', fallback);
+      return fallback;
     }
   }
 
-  /**
-   * Post token to backend flexible endpoint /api/save-token-basic
-   * This endpoint accepts optional userId — if provided, userId is attached.
-   *
-   * If you want a strict test use BACKEND_BASIC_TEST (android-basic-save).
-   */
-  async function postTokenToBackend(userId: string | null, token: string, retries = 3) {
+  // ------------- POST token to backend -------------
+  async function postTokenToBackend(userId: string | null, token: string) {
     if (!token) return false;
-    const payload: any = {
-      fcmToken: token,
-      deviceInfo: Platform.OS + ' / RN',
-    };
+    const key = `${userId ?? 'null'}|${token}`;
+    if (postedSetRef.current.has(key)) {
+      console.log('[App] Already posted this token for this userId -> skip', key);
+      return true;
+    }
+
+    const deviceInfo = await getDeviceInfoString();
+    const payload: any = { fcmToken: token, deviceInfo, platform: 'android' };
     if (userId) payload.userId = userId;
 
-    // choose URL that supports optional userId
-    const url = BACKEND_SAVE_TOKEN;
-
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        console.log(`[App] POSTing token to ${url} (attempt ${attempt})`, { userId: userId ?? null });
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const bodyText = await res.text().catch(() => '');
-        if (res.ok) {
-          console.log(`[App] Saved token to backend (attempt ${attempt}). serverReply:`, bodyText);
-          return true;
-        } else {
-          console.warn(`[App] save-token attempt ${attempt} failed: status=${res.status}, body=${bodyText}`);
-        }
-      } catch (err) {
-        console.warn(`[App] save-token attempt ${attempt} network error:`, err);
+    try {
+      console.log('[App] POSTing token to backend', { url: SAVE_TOKEN_BASIC_URL, payload });
+      const res = await fetch(SAVE_TOKEN_BASIC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const txt = await res.text().catch(() => '');
+      console.log('[App] postTokenToBackend response', res.status, txt);
+      if (res.ok) {
+        postedSetRef.current.add(key);
+        return true;
+      } else {
+        return false;
       }
-      // backoff
-      await new Promise<void>(resolve => setTimeout(resolve, attempt * 500));
+    } catch (err) {
+      console.warn('[App] postTokenToBackend network error', err);
+      return false;
     }
-
-    console.warn('[App] All attempts to save token failed; token remains pending for retry.');
-    return false;
   }
 
-  // --- FCM init & listeners (runs once) ---
+  // ------------- Flush pending token/user to backend -------------
+  async function tryFlushPending() {
+    const token = nativeToken ?? (await getLocalToken());
+    const userId = userIdFromWeb ?? (await getLocalUserId());
+    if (!token) {
+      console.log('[App] tryFlushPending: no token yet');
+      return;
+    }
+    if (!userId) {
+      console.log('[App] tryFlushPending: no userId yet');
+      return;
+    }
+    const ok = await postTokenToBackend(userId, token);
+    if (ok) {
+      await clearLocalToken();
+      await clearLocalUserId();
+      console.log('[App] Token attached to user on backend; cleared local pending values.');
+    } else {
+      await saveTokenLocally(token);
+      await saveUserIdLocally(userId);
+      console.log('[App] Failed to attach token; saved pending values locally.');
+    }
+  }
+
+  // ------------- Send native token to WebView (so web can forward with auth) -------------
+  function postNativeTokenToWeb(token: string | null) {
+    if (!token || !webRef.current) return;
+    try {
+      webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token, platform: 'android' }));
+      console.log('[App] Posted native FCM token to webview (for forwarding).');
+    } catch (e) {
+      console.warn('[App] failed to post native token to webview', e);
+    }
+  }
+
+  // ------------- FCM init & listeners -------------
   useEffect(() => {
     let mounted = true;
+    let unsubRefresh: (() => void) | null = null;
+    let unsubForeground: (() => void) | null = null;
 
     async function initFCM() {
       try {
@@ -485,31 +459,18 @@ export default function App() {
           authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
           authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-        if (!enabled) {
-          console.log('[App] Notification permission not granted.');
-          return;
-        }
+        console.log('[App] messaging permission:', authStatus, 'enabled=', enabled);
+        if (!enabled) return;
 
-        // Get token
         const token = await messaging().getToken();
         console.log('[App] FCM Token (native):', token);
         if (!mounted || !token) return;
 
         setNativeToken(token);
+        // post to web so it can forward with auth header
+        postNativeTokenToWeb(token);
 
-        // Post token into WebView so website sees it
-        if (webRef.current) {
-          webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
-        }
-
-        // Try saving immediately (use flexible endpoint so userId optional)
-        const ok = await postTokenToBackend(userIdFromWeb ?? null, token);
-        if (!ok) {
-          // persist token for later retry if save failed
-          await saveTokenLocally(token);
-        } else {
-          await clearLocalToken();
-        }
+        await tryFlushPending();
       } catch (err) {
         console.warn('[App] FCM init error', err);
       }
@@ -517,87 +478,180 @@ export default function App() {
 
     initFCM();
 
-    // token refresh handling
-    const unsubRefresh = messaging().onTokenRefresh(async newToken => {
-      console.log('[App] Token refreshed:', newToken);
-      setNativeToken(newToken);
-
-      if (webRef.current) {
-        webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: newToken }));
-      }
-
-      const ok = await postTokenToBackend(userIdFromWeb ?? null, newToken);
-      if (!ok) {
-        await saveTokenLocally(newToken);
-      } else {
-        await clearLocalToken();
-      }
-    });
+    // token refresh
+    try {
+      unsubRefresh = messaging().onTokenRefresh(async newToken => {
+        console.log('[App] Token refreshed:', newToken);
+        setNativeToken(newToken);
+        postNativeTokenToWeb(newToken);
+        await tryFlushPending();
+      });
+    } catch (e) {
+      console.warn('[App] onTokenRefresh subscribe error', e);
+    }
 
     // foreground message handler
-    const unsubForeground = messaging().onMessage(async remoteMessage => {
-      console.log('[App] Foreground message:', remoteMessage);
-      if (remoteMessage?.notification) {
-        Alert.alert(remoteMessage.notification.title ?? 'Notification', remoteMessage.notification.body ?? '');
-      }
-    });
+    try {
+      unsubForeground = messaging().onMessage(async remoteMessage => {
+        console.log('[App] Foreground message:', remoteMessage);
+        if (remoteMessage?.notification) {
+          Alert.alert(remoteMessage.notification.title ?? 'Notification', remoteMessage.notification.body ?? '');
+        }
+        // forward to web app too
+        try {
+          webRef.current?.postMessage(JSON.stringify({ type: 'FCM_MESSAGE', payload: remoteMessage }));
+        } catch (e) {
+          console.warn('[App] Failed to forward foreground message to webview', e);
+        }
+      });
+    } catch (e) {
+      console.warn('[App] onMessage subscribe error', e);
+    }
 
     return () => {
       mounted = false;
-      unsubRefresh();
-      unsubForeground();
+      try { unsubRefresh && unsubRefresh(); } catch (e) {}
+      try { unsubForeground && unsubForeground(); } catch (e) {}
     };
-  }, []); // run once
+  }, [userIdFromWeb]);
 
-  // --- Handle incoming messages from WebView (USER_INFO, REQUEST_NATIVE_TOKEN, LOG) ---
-  const onWebMessage = (event: WebViewMessageEvent) => {
-    (async () => {
-      try {
-        const data = JSON.parse(event.nativeEvent.data);
+  // ------------- Handle notification taps (background & quit) -------------
+  useEffect(() => {
+    let unsubOpened: (() => void) | null = null;
+    try {
+      unsubOpened = messaging().onNotificationOpenedApp(remoteMessage => {
+        console.log('[FCM] App opened from background via notification:', remoteMessage);
+        try {
+          webRef.current?.postMessage(JSON.stringify({ type: 'NOTIFICATION_OPEN', payload: remoteMessage }));
+        } catch (e) {
+          console.warn('[App] failed to post notification-open to webview', e);
+        }
+      });
+    } catch (e) {
+      console.warn('[App] onNotificationOpenedApp subscribe error', e);
+    }
 
-        if (data?.type === 'REQUEST_NATIVE_TOKEN') {
-          if (nativeToken && webRef.current) {
-            webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token: nativeToken }));
-          } else {
-            // get token then send
+    // cold-start (quit)
+    messaging()
+      .getInitialNotification()
+      .then(remoteMessage => {
+        if (remoteMessage) {
+          console.log('[FCM] App opened from quit via notification:', remoteMessage);
+          // Save to AsyncStorage so the web can read if WebView isn't ready yet
+          saveInitialNotification(remoteMessage).catch(() => {});
+          // try to post after short delay to let WebView mount
+          setTimeout(async () => {
             try {
-              const token = await messaging().getToken();
-              setNativeToken(token);
-              if (webRef.current) webRef.current.postMessage(JSON.stringify({ type: 'FCM_TOKEN', token }));
+              // if webRef available, post directly
+              if (webRef.current) {
+                webRef.current.postMessage(JSON.stringify({ type: 'NOTIFICATION_OPEN', payload: remoteMessage }));
+              } else {
+                // otherwise rely on stored initial notification
+                console.log('[App] WebView not ready yet; saved initial notification to storage');
+              }
             } catch (e) {
-              console.warn('[App] getToken error', e);
+              console.warn('[App] failed to forward initial notification to webview', e);
             }
+          }, 700);
+        }
+      })
+      .catch(err => console.warn('[FCM] getInitialNotification error', err));
+
+    return () => {
+      try { unsubOpened && unsubOpened(); } catch (e) {}
+    };
+  }, []);
+
+  // ------------- Ask web page to send user on load complete -------------
+  const onWebViewLoadEnd = () => {
+    try {
+      if (!webRef.current) return;
+      webRef.current.injectJavaScript('window.__sendUserToRN && window.__sendUserToRN(); true;');
+      webRef.current.injectJavaScript('try{ if (typeof window.sendUserToRN === "function") window.sendUserToRN(window.__CURRENT_USER_FOR_RN||null);}catch(e){}; true;');
+      // If we had a persisted initial notification, send it now
+      getInitialNotificationFromStorage().then(n => {
+        if (n && webRef.current) {
+          try {
+            webRef.current.postMessage(JSON.stringify({ type: 'NOTIFICATION_OPEN', payload: n }));
+            console.log('[App] forwarded persisted initial notification to webview after loadEnd');
+          } catch (e) {
+            console.warn('[App] failed to post persisted initial notification', e);
           }
         }
+        // Also if we have an in-memory nativeToken, post it to web now (ensures web gets it)
+        if (nativeToken && webRef.current) {
+          postNativeTokenToWeb(nativeToken);
+        }
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('[App] onWebViewLoadEnd inject error', e);
+    }
+  };
 
-        // When web tells us who the logged-in user is
-        if (data?.type === 'USER_INFO' && data.userId) {
-          const userId = data.userId;
-          setUserIdFromWeb(userId);
-          console.log('[App] Received userId from web:', userId);
+  // ------------- Handle incoming messages from WebView -------------
+  const onWebMessage = (event: WebViewMessageEvent) => {
+    console.log('[App] Raw WebView message:', event.nativeEvent.data);
+    let data: any = null;
+    try {
+      data = JSON.parse(event.nativeEvent.data);
+    } catch (e) {
+      console.warn('[App] Failed to parse WebView message JSON', e);
+      return;
+    }
 
-          // Try to send token immediately: prefer in-memory token, fallback to persisted local token
-          const tokenToSend = nativeToken ?? (await getLocalToken());
-          if (!tokenToSend) {
-            console.log('[App] No token available to send to backend on USER_INFO.');
+    (async () => {
+      try {
+        if (data?.type === 'REQUEST_NATIVE_TOKEN') {
+          // web requested native token — respond by posting native token to web
+          console.log('[App] web requested native token; posting if available.');
+          if (nativeToken) postNativeTokenToWeb(nativeToken);
+          return;
+        }
+
+        if (data?.type === 'USER_INFO') {
+          const user = data.user ?? null;
+          // optionally the web may also pass an authToken (not recommended to store long-term)
+          const authToken = data.authToken ?? null;
+          if (!user) {
+            console.log('[App] Received USER_INFO null -> clearing userIdFromWeb');
+            setUserIdFromWeb(null);
+            await clearLocalUserId();
             return;
           }
-
-          const ok = await postTokenToBackend(userId, tokenToSend);
-          if (ok) {
-            // success: clear stored token
-            await clearLocalToken();
-          } else {
-            // failed: ensure it's persisted
-            await saveTokenLocally(tokenToSend);
+          const userId = user.id ?? user._id ?? null;
+          if (!userId) {
+            console.warn('[App] USER_INFO missing id field', user);
+            return;
           }
+          console.log('[App] Received userId from web:', userId);
+          setUserIdFromWeb(userId);
+          await saveUserIdLocally(userId);
+
+          // if web provided an auth token and you want RN to call backend directly,
+          // you could store it temporarily. Generally prefer web-forward approach.
+          if (authToken) {
+            try {
+              await AsyncStorage.setItem(authTokenKey, authToken);
+              console.log('[App] Stored auth token from web (temporary) for direct backend calls.');
+            } catch (e) {
+              console.warn('[App] failed to store auth token', e);
+            }
+          }
+
+          // ensure any pending token is flushed to backend (direct call)
+          await tryFlushPending();
+
+          return;
         }
 
         if (data?.type === 'LOG') {
-          console.log('[App] LOG from web:', data.message);
+          console.log('[App] LOG from webview:', data.message);
+          return;
         }
+
+        console.log('[App] Unknown message from webview', data);
       } catch (e) {
-        console.warn('[App] Invalid message from web', e);
+        console.warn('[App] Error handling WebView message', e);
       }
     })();
   };
@@ -609,6 +663,7 @@ export default function App() {
         ref={webRef}
         source={{ uri: WEB_URL }}
         onMessage={onWebMessage}
+        onLoadEnd={onWebViewLoadEnd}
         originWhitelist={['*']}
         javaScriptEnabled={true}
       />
